@@ -1,0 +1,57 @@
+cabal-version: 3.4
+name:          gada-seed-sale
+version:       0.1.0.0
+author:        GADA
+maintainer:    GADA
+
+common lang
+  default-language: Haskell2010
+  default-extensions:
+    ImportQualifiedPost
+    NoImplicitPrelude
+  ghc-options:
+    -Weverything -Werror
+    -- For plutus
+    -Wno-all-missed-specialisations
+    -Wno-missing-local-signatures
+    -Wno-missing-safe-haskell-mode
+    -Wno-unsafe
+    -Wno-unused-packages
+    -- For plutus-tx
+    -fno-ignore-interface-pragmas
+    -fno-omit-interface-pragmas
+    -fobject-code
+
+library
+  import: lang
+  hs-source-dirs: src
+  exposed-modules:
+    GADA.Contracts.Common
+    GADA.Contracts.OffChain
+    GADA.Contracts.OnChain
+    GADA.Contracts.Types
+  build-depends:
+    , aeson
+    , base
+    , containers
+    , plutus-contract
+    , plutus-ledger
+    , plutus-ledger-constraints
+    , plutus-tx
+    , plutus-tx-plugin
+    -- GADA Internal
+
+test-suite seed-sale-tests
+  import: lang
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Test.hs
+  build-depends:
+    , base
+    , data-default
+    , plutus-contract
+    , plutus-ledger
+    , plutus-ledger-constraints
+    , tasty
+    , tasty-quickcheck
+    -- GADA Internal
