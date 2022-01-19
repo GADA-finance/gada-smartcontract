@@ -15,7 +15,7 @@ common lang
     ImportQualifiedPost
     NoImplicitPrelude
   ghc-options:
-    -Weverything -Werror
+    -- -Weverything -Werror
     -- For plutus
     -Wno-all-missed-specialisations
     -Wno-missing-local-signatures
@@ -26,15 +26,18 @@ common lang
     -fno-ignore-interface-pragmas
     -fno-omit-interface-pragmas
     -fobject-code
+    -fplugin-opt PlutusTx.Plugin:defer-errors
 
 library
   import: lang
   hs-source-dirs: src
   exposed-modules:
+    GADA.Contracts.Trace
     GADA.Contracts.Common
     GADA.Contracts.OffChain
     GADA.Contracts.OnChain
     GADA.Contracts.Types
+    GADA.Contracts.Utils
   build-depends:
     , aeson
     , base
@@ -44,19 +47,21 @@ library
     , plutus-ledger-constraints
     , plutus-tx
     , plutus-tx-plugin
+    , either
+    , lens
     -- GADA Internal
 
--- test-suite seed-sale-tests
---   import: lang
---   type: exitcode-stdio-1.0
---   hs-source-dirs: test
---   main-is: Test.hs
---   build-depends:
---     , base
---     , data-default
---     , plutus-contract
---     , plutus-ledger
---     , plutus-ledger-constraints
---     , tasty
---     , tasty-quickcheck
---     -- GADA Internal
+test-suite seed-sale-tests
+  import: lang
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Test.hs
+  build-depends:
+    , base
+    , data-default
+    , plutus-contract
+    , plutus-ledger
+    , plutus-ledger-constraints
+    , tasty
+    , tasty-quickcheck
+    -- GADA Internal
