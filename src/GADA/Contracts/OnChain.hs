@@ -7,14 +7,15 @@
 -- | Core on-chain seedSale functions.
 module GADA.Contracts.OnChain where
 
-import GADA.Contracts.Common 
-import GADA.Contracts.Types 
+import GADA.Contracts.Common
+import GADA.Contracts.Types
 
 import Ledger (
   Address,
   Extended (Finite),
   LowerBound (LowerBound),
   POSIXTime,
+  PubKeyHash,
   ScriptContext (ScriptContext),
   TxInfo (TxInfo),
   ivFrom,
@@ -43,41 +44,53 @@ import PlutusTx.Prelude qualified as P
 -- validates the transaction that spends the seedSale position output.
 validateSeedSale :: SeedSaleParams -> SeedSaleDatum -> SeedSaleRedeemer -> Ledger.ScriptContext -> P.Bool
 validateSeedSale
-  params
+  params@SeedSaleParams {pOperatorPKH}
   datum
   redeemer
-  ctx@ScriptContext {scriptContextTxInfo} = P.True
-    -- case redeemer of
-    --   Withdraw rAmount -> validateWithdraw params datum ctx rAmount
-    --   Update -> P.traceIfFalse "Invalid operator" (txSignedBy scriptContextTxInfo pOperatorPKH)
+  ctx@ScriptContext {scriptContextTxInfo} =
+    case redeemer of
+      Withdraw pkh rAmount -> validateWithdraw params datum ctx rAmount pkh
+      Update -> P.traceIfFalse "Invalid operator" (txSignedBy scriptContextTxInfo pOperatorPKH)
+      Buy pkh rAmount -> validateBuyGada params datum ctx rAmount pkh
 
 -- | `validateWithdraw` @params datum ctx withdrawalAmount@
 -- validates the transaction that withdraws from the seedSale position output.
--- validateWithdraw :: SeedSaleParams -> SeedSaleDatum -> ScriptContext -> P.Integer -> P.Bool
--- validateWithdraw
---   params
---   datum@SeedSaleDatum {dSeedSalePKH, dAmountPerEpoch, dTotalEpochs, dWithdrawnAmount}
---   ctx@ScriptContext {scriptContextTxInfo = info@TxInfo {txInfoValidRange}}
---   rAmount =
---     P.traceIfFalse "Invalid person" (txSignedBy info dSeedSalePKH)
---       P.&& P.traceIfFalse "Invalid amount" (rAmount P.> 0 P.&& newWithdrawalAmount P.<= unlockedAmount datum withdrawalTime)
---       P.&& P.traceIfFalse "Invalid output" (checkOwnOutputConstraint ctx (OutputConstraint newDatum newValue))
---     where
---       withdrawalTime :: POSIXTime
---       withdrawalTime = case ivFrom txInfoValidRange of
---         LowerBound (Finite t) _ -> t
---         _ -> P.traceError "Invalid withdrawal time"
+validateWithdraw :: SeedSaleParams -> SeedSaleDatum -> ScriptContext -> P.Integer -> PubKeyHash -> P.Bool
+validateWithdraw
+  params
+  datum@SeedSaleDatum {}
+  ctx@ScriptContext {scriptContextTxInfo = info@TxInfo {txInfoValidRange}}
+  rAmount
+  pkh =
+    P.traceIfFalse "Invalid person" (txSignedBy info pkh)
+      P.&& P.traceIfFalse "Invalid amount" (rAmount P.> 0) --P.&& newWithdrawalAmount P.<= unlockedAmount datum withdrawalTime)
+      -- P.&& P.traceIfFalse "Invalid output" (checkOwnOutputConstraint ctx (OutputConstraint newDatum newValue))
+      -- where
+      --   withdrawalTime :: POSIXTime
+      --   withdrawalTime = case ivFrom txInfoValidRange of
+      --     LowerBound (Finite t) _ -> t
+      --     _ -> P.traceError "Invalid withdrawal time"
 
---       newWithdrawalAmount :: P.Integer
---       newWithdrawalAmount = dWithdrawnAmount P.+ rAmount
+--   newWithdrawalAmount :: P.Integer
+--   newWithdrawalAmount = dWithdrawnAmount P.+ rAmount
 
---       newDatum :: SeedSaleDatum
---       newDatum = datum {dWithdrawnAmount = newWithdrawalAmount}
+--   newDatum :: SeedSaleDatum
+--   newDatum = datum {dWithdrawnAmount = newWithdrawalAmount}
 
---       newValue :: Value
---       newValue = seedSaleValue params (dTotalEpochs P.* dAmountPerEpoch P.- newWithdrawalAmount)
+--   newValue :: Value
+--   newValue = seedSaleValue params (dTotalEpochs P.* dAmountPerEpoch P.- newWithdrawalAmount)
 
 -- | `seedSaleScript` @params@ compiles the parameterized seedSale script.
+validateBuyGada :: SeedSaleParams -> SeedSaleDatum -> ScriptContext -> P.Integer -> PubKeyHash -> P.Bool
+validateBuyGada
+  params
+  datum@SeedSaleDatum {}
+  ctx@ScriptContext {scriptContextTxInfo = info@TxInfo {txInfoValidRange}}
+  rAmount
+  pkh =
+    P.traceIfFalse "Invalid person" (txSignedBy info pkh)
+      P.&& P.traceIfFalse "Invalid amount" (rAmount P.> 0)
+
 seedSaleScript :: SeedSaleParams -> TypedValidator SeedSalePosition
 seedSaleScript =
   mkTypedValidatorParam @SeedSalePosition

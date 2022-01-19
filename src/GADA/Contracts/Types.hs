@@ -9,26 +9,27 @@
 -- | Core Seed Sale types.
 module GADA.Contracts.Types where
 
+import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 import Ledger (AssetClass, POSIXTime, PubKeyHash)
 import Ledger.Typed.Scripts (ValidatorTypes (DatumType, RedeemerType))
 import PlutusTx (makeLift, unstableMakeIsData)
+import PlutusTx.AssocMap (Map)
 import Prelude (Eq, Integer, Maybe, Show)
-import Data.Aeson (FromJSON, ToJSON)
 
 data SeedSaleParams = SeedSaleParams
   { -- | GADA token
     pGADAAsset :: AssetClass
-    -- | The asset class of the authentic token that identifies legit `Seed Sale Position`s.
-  , pAuthToken :: AssetClass
-    -- | Master key
-  , pOperatorPKH :: PubKeyHash
+  , -- | The asset class of the authentic token that identifies legit `Seed Sale Position`s.
+    pAuthToken :: AssetClass
+  , -- | Master key
+    pOperatorPKH :: PubKeyHash
   }
   deriving stock (Generic, Show)
 
 -- | Datum type of a seed sale GADA position.
 data SeedSaleDatum = SeedSaleDatum
-  { dListSale :: [(PubKeyHash, (Integer, Integer))]
+  { dListSale :: Map PubKeyHash (Integer, Integer)
   , dRate :: Integer
   , dAmountPerMonth :: Integer
   , dMaxAmount :: Integer
@@ -42,9 +43,9 @@ data SeedSaleDatum = SeedSaleDatum
 data SeedSaleRedeemer
   = Update
   | Withdraw PubKeyHash Integer
+  | Buy PubKeyHash Integer
   deriving stock (Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
-
 
 -- | Data type for a seed sale GADA position.
 data SeedSalePosition
@@ -57,18 +58,17 @@ instance ValidatorTypes SeedSalePosition where
 --
 -- Only need the public key hash of the fully trusted operator
 -- that can mint and burn this authentic token.
-newtype SeedSaleAuthTokenParams = SeedSaleAuthTokenParams {
-  tpOperatorPKH :: PubKeyHash
+newtype SeedSaleAuthTokenParams = SeedSaleAuthTokenParams
+  { tpOperatorPKH :: PubKeyHash
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
-
 -- | Offchain parameters for creating a seed sale GADA position.
 --
 -- Only need the initial datum.
-data CreateSeedSaleParams = CreateSeedSaleParams {
-    cpOperatorPKH :: PubKeyHash
+data CreateSeedSaleParams = CreateSeedSaleParams
+  { cpOperatorPKH :: PubKeyHash
   , cpAmountGADA :: Integer
   , cpInitialDatum :: SeedSaleDatum
   }
@@ -84,19 +84,24 @@ data UpdateSeedSaleParams = UpdateSeedSaleParams
   deriving stock (Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
 
+-- | Offchain parameters for buy a seed sale GADA position.
+data BuySeedSaleParams = BuySeedSaleParams
+  { bpNewAmount :: Integer
+  , bpSubmitTime :: Maybe POSIXTime
+  }
+  deriving stock (Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
 
 -- | Offchain parameters for withdrawing from a seed sale GADA position.
 data WithdrawSeedSaleParams = WithdrawSeedSaleParams
   { -- | The withdrawal GADA amount.
     wpWithdrawAmount :: Integer
-    -- | An optional submit time. If this is `Nothing`,
+  , -- | An optional submit time. If this is `Nothing`,
     -- the backend will calculate the time for the frontend.
-  , wpSubmitTime :: Maybe POSIXTime
+    wpSubmitTime :: Maybe POSIXTime
   }
   deriving stock (Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
-
-
 
 -- Make IsData
 unstableMakeIsData ''SeedSaleDatum

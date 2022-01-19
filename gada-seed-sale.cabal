@@ -38,6 +38,7 @@ library
     GADA.Contracts.OnChain
     GADA.Contracts.Types
     GADA.Contracts.Utils
+    GADA.Contracts.Token
   build-depends:
     , aeson
     , base
@@ -49,6 +50,7 @@ library
     , plutus-tx-plugin
     , either
     , lens
+    , data-default
     -- GADA Internal
 
 test-suite seed-sale-tests

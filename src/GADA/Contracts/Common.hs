@@ -6,10 +6,19 @@
 module GADA.Contracts.Common where
 
 import GADA.Contracts.Types
+import Ledger (
+  ChainIndexTxOut,
+  PaymentPubKeyHash (PaymentPubKeyHash),
+  PubKeyHash,
+  TxOutRef,
+  interval,
+ )
 import Ledger.Ada (lovelaceValueOf)
 import Ledger.Time (POSIXTime (getPOSIXTime))
 import Ledger.Value (Value, assetClassValue)
-import PlutusTx.Prelude (Integer, divide, min, (*), (-), (.), (<>))
+import Plutus.Contract
+import PlutusTx.AssocMap qualified as PtMap
+import PlutusTx.Prelude
 
 -- | The minimum amount of Lovelace required at a seed sale output.
 --
@@ -23,38 +32,52 @@ minLovelaceInSeedSaleOutput = 2_000_000
 minADAInSeedSaleOutput :: Value
 minADAInSeedSaleOutput = lovelaceValueOf minLovelaceInSeedSaleOutput
 
--- | How long is an epoch in seconds.
---
--- It is 5 * 24 * 60 * 60 = 432_000 at the moment.
---
--- One can build with the short-epoch cabal flag to make it 2 seconds,
--- which is useful for testing and simulation.
--- anEpochInSec :: Integer
--- #ifdef SHORT_EPOCH
--- anEpochInSec = 2
--- #else
--- anEpochInSec = 5 * 24 * 60 * 60
--- #endif
+{-# INLINEABLE updateWithdraw #-}
+updateWithdraw ::
+  PubKeyHash ->
+  Integer ->
+  PtMap.Map PubKeyHash (Integer, Integer) ->
+  PtMap.Map PubKeyHash (Integer, Integer)
+updateWithdraw
+  key
+  amount
+  oldList =
+    PtMap.fromList
+      ((\(k, (rewardAmount, withdrawAmount)) -> (k, (rewardAmount, if k == key then amount + withdrawAmount else withdrawAmount))) <$> PtMap.toList oldList)
 
--- | How long is an epoch in milliseconds.
---
--- It is `anEpochInSec` * 1_000 = 432_000_000 at the moment.
--- anEpochInMs :: Integer
--- anEpochInMs = anEpochInSec * 1_000
+{-# INLINEABLE updateReward #-}
+updateReward ::
+  PubKeyHash ->
+  Integer ->
+  PtMap.Map PubKeyHash (Integer, Integer) ->
+  PtMap.Map PubKeyHash (Integer, Integer)
+updateReward
+  key
+  amount
+  oldList =
+    PtMap.fromList
+      ((\(k, (rewardAmount, withdrawAmount)) -> (k, (if k == key then amount + rewardAmount else rewardAmount, withdrawAmount))) <$> PtMap.toList oldList)
 
--- | `unlockedAmount` @datum withdrawalTime@ calculates
--- how much has been unlocked from a seedSale position at the given withdrawal time.
--- unlockedAmount :: SeedSaleDatum -> POSIXTime -> Integer
--- unlockedAmount SeedSaleDatum {dTotalEpochs, dAmountPerEpoch, dStartTime} withdrawalTime =
---   let lastedEpochs = getPOSIXTime (withdrawalTime - dStartTime) `divide` anEpochInMs
---    in dAmountPerEpoch * min lastedEpochs dTotalEpochs
+{-# INLINEABLE checkAmountWithdraw #-}
+checkAmountWithdraw ::
+  PubKeyHash ->
+  Integer ->
+  PtMap.Map PubKeyHash (Integer, Integer) ->
+  Bool
+checkAmountWithdraw
+  key
+  amount
+  oldList =
+    let (rewardAmount, withdrawAmount) = fromMaybe (-1, -1) (PtMap.lookup key oldList)
+     in rewardAmount >= withdrawAmount + amount
 
--- | `seedSaleValue` @params seedSaleAmount@
--- constructs the value of a seedSale position from its amount. Including:
---
--- - `pSeedSaleAsset`: The passed-in seedSale amount of this output.
--- - `pAuthToken`: Exactly one auth token.
--- - `ADA`: `minADAInSeedSaleOutput`.
--- seedSaleValue :: SeedSaleParams -> Integer -> Value
--- seedSaleValue SeedSaleParams {pAuthToken, pSeedSaleAsset} =
---   ((minADAInSeedSaleOutput <> assetClassValue pAuthToken 1) <>) . assetClassValue pSeedSaleAsset
+{-# INLINEABLE checkAmountDelegate #-}
+checkAmountDelegate ::
+  PubKeyHash ->
+  Integer ->
+  Integer ->
+  PtMap.Map PubKeyHash (Integer, Integer) ->
+  Bool
+checkAmountDelegate pkh amount max oldList =
+  let curReward = fst $ fromMaybe (0, 0) (PtMap.lookup pkh oldList)
+   in curReward + amount <= max

@@ -14,32 +14,61 @@ module GADA.Contracts.OffChain where
 
 import Control.Monad
 import Data.Aeson (FromJSON)
-import Ledger ( ChainIndexTxOut, TxOutRef, PubKeyHash, PaymentPubKeyHash (PaymentPubKeyHash))
-import Ledger.Constraints qualified as Constraints
-import Ledger.Value (assetClassValue, assetClassValueOf)
-import Plutus.Contract
-import Prelude
-import PlutusTx qualified
-import  Data.Map
+import Data.Map
 import Data.Maybe
+import Ledger (
+  ChainIndexTxOut,
+  PaymentPubKeyHash (PaymentPubKeyHash),
+  PubKeyHash,
+  TxOutRef,
+  interval,
+ )
+import Ledger.Ada qualified as Ada
+import Ledger.Constraints qualified as Constraints
 
-import GADA.Contracts.Common 
+import Ledger.Value (
+  assetClassValue,
+  assetClassValueOf,
+ )
+import Plutus.Contract
+import PlutusTx qualified
+import PlutusTx.AssocMap qualified as PtMap
+import Prelude
+
+import GADA.Contracts.Common
 import GADA.Contracts.OnChain
-import GADA.Contracts.Types 
-import GADA.Contracts.Utils 
+import GADA.Contracts.Types
+import GADA.Contracts.Utils
 
 -- | `findSeedSalePosition` @params pkh@ finds an authentic seed sale position with
 -- the passed in `pkh` in white list.
-findSeedSalePosition ::
+findSeedSalePositionByPKH ::
   SeedSaleParams ->
-  Integer ->
+  PubKeyHash ->
   Contract w s ContractError (TxOutRef, ChainIndexTxOut, SeedSaleDatum)
-findSeedSalePosition params@SeedSaleParams {pAuthToken} numContract =
+findSeedSalePositionByPKH params@SeedSaleParams {pAuthToken} pkh =
   maybe (throwError "Seed sale position not found") pure
     =<< findFirstOutput
       (seedSaleAddress params)
       ( \(_, o) -> case getDatum o of
-          Just d -> dNumContract d == numContract && assetClassValueOf (getValue o) pAuthToken == 1
+          Just d ->
+            PtMap.member pkh (dListSale d)
+              && assetClassValueOf (getValue o) pAuthToken == 1
+          _ -> False
+      )
+
+findSeedSalePositionByNum ::
+  SeedSaleParams ->
+  Integer ->
+  Contract w s ContractError (TxOutRef, ChainIndexTxOut, SeedSaleDatum)
+findSeedSalePositionByNum params@SeedSaleParams {pAuthToken} numContract =
+  maybe (throwError "Seed sale position not found") pure
+    =<< findFirstOutput
+      (seedSaleAddress params)
+      ( \(_, o) -> case getDatum o of
+          Just d ->
+            dNumContract d == numContract
+              && assetClassValueOf (getValue o) pAuthToken == 1
           _ -> False
       )
 
@@ -48,6 +77,7 @@ type SeedSaleSchema =
   Endpoint "CreateSeedSale" CreateSeedSaleParams
     .\/ Endpoint "UpdateSeedSale" UpdateSeedSaleParams
     .\/ Endpoint "WithdrawSeedSale" WithdrawSeedSaleParams
+    .\/ Endpoint "BuySeedSale" BuySeedSaleParams
 
 -- | `seedSaleEndpoints` @params@ handles the seedSale endpoints with
 -- `createSeedSale`, `updateSeedSale`, and `withdrawSeedSale`.
@@ -56,6 +86,7 @@ seedSaleEndpoints seedSaleParams =
   ( handle @"CreateSeedSale" createSeedSale
       `select` handle @"UpdateSeedSale" updateSeedSale
       `select` handle @"WithdrawSeedSale" withdrawSeedSale
+      `select` handle @"BuySeedSale" buySeedSale
   )
     <> seedSaleEndpoints seedSaleParams
   where
@@ -67,60 +98,103 @@ seedSaleEndpoints seedSaleParams =
     handle = endpoint @l . (handleError logError .) . ($ seedSaleParams)
 
 -- | `createSeedSale` @seedSaleParams createParams@ submits a transaction that creates a seedSale position.
-createSeedSale :: SeedSaleParams -> CreateSeedSaleParams -> Contract w s ContractError ()
-createSeedSale seedSaleParams@SeedSaleParams{pAuthToken, pGADAAsset} createSqeedSaleParams@CreateSeedSaleParams{cpOperatorPKH, cpInitialDatum, cpAmountGADA} =
+createSeedSale ::
+  SeedSaleParams ->
+  CreateSeedSaleParams ->
+  Contract w s ContractError ()
+createSeedSale
+  seedSaleParams@SeedSaleParams {pAuthToken, pGADAAsset}
+  createSqeedSaleParams@CreateSeedSaleParams {cpOperatorPKH, cpInitialDatum, cpAmountGADA} =
     submitTxPairs
       [ mustMintValue -- Mint an auth token
           [seedSaleAuthTokenPolicy (SeedSaleAuthTokenParams cpOperatorPKH)]
           (assetClassValue pAuthToken 1)
       , mustPayToScripts -- Create a seedSale output with the initial datum and vested amount
           (seedSaleScript seedSaleParams)
-          [(cpInitialDatum, minADAOutput <> assetClassValue pAuthToken 1 <> assetClassValue pGADAAsset cpAmountGADA )]
+          [(cpInitialDatum, minADAOutput <> assetClassValue pAuthToken 1 <> assetClassValue pGADAAsset cpAmountGADA)]
       ]
 
 -- | `updateSeedSale` @seedSaleParams updateParams@ submits a transaction that updates an existing seedSale position.
-updateSeedSale :: SeedSaleParams -> UpdateSeedSaleParams -> Contract w s ContractError ()
+updateSeedSale ::
+  SeedSaleParams -> UpdateSeedSaleParams -> Contract w s ContractError ()
 updateSeedSale
-  seedSaleParams@SeedSaleParams{pGADAAsset, pAuthToken}
-  updateSeedSaleParams@UpdateSeedSaleParams{upNumContract, upNewDatum, upNewAmount} =
+  seedSaleParams@SeedSaleParams {pGADAAsset, pAuthToken}
+  updateSeedSaleParams@UpdateSeedSaleParams {upNumContract, upNewDatum, upNewAmount} =
     do
-      (oref, o, _) <- findSeedSalePosition seedSaleParams upNumContract
+      (oref, o, _) <- findSeedSalePositionByNum seedSaleParams upNumContract
       let inst = seedSaleScript seedSaleParams
           curValue = fromMaybe (assetClassValueOf (getValue o) pGADAAsset) upNewAmount
+          addValue = curValue - assetClassValueOf (getValue o) pGADAAsset
+          newValue = getValue o <> assetClassValue pGADAAsset addValue
       submitTxPairs
         [ -- Spend the previous output
           mustSpendScriptOutputs inst [(oref, o, Update)]
         , -- Create a new seedSale output with the new datum and vested amount
-          mustPayToScripts inst [(upNewDatum, minADAOutput <> assetClassValue pAuthToken 1 <> assetClassValue pGADAAsset curValue)]
+          mustPayToScripts inst [(upNewDatum, newValue)]
         ]
 
+buySeedSale :: SeedSaleParams -> BuySeedSaleParams -> Contract w s ContractError ()
+buySeedSale
+  seedSaleParams@SeedSaleParams {pGADAAsset, pAuthToken}
+  BuySeedSaleParams {bpNewAmount, bpSubmitTime} = do
+    unless (bpNewAmount > 0) (throwError "Must withdraw a positive amount")
+
+    -- Find the positon to buy from
+    PaymentPubKeyHash pkh <- ownPaymentPubKeyHash
+    (oref, o, prevDatum@SeedSaleDatum {dListSale, dRate, dMaxAmount}) <- findSeedSalePositionByPKH seedSaleParams pkh
+
+    -- Get submit time and validate buy amount
+    submitTime <- case bpSubmitTime of
+      Just t -> pure t
+      _ -> currentTime
+    let check = checkAmountDelegate pkh (bpNewAmount * dRate) dMaxAmount dListSale
+    unless check (throwError "Invalid buy amount")
+
+    -- Prepare data then submit the transaction
+    let newDatum = prevDatum {dListSale = updateReward pkh (bpNewAmount * dRate) dListSale}
+        newValue = getValue o <> Ada.lovelaceValueOf bpNewAmount
+        inst = seedSaleScript seedSaleParams
+    submitTxPairs
+      [ -- Spend the previous output
+        mustSpendScriptOutputs inst [(oref, o, Buy pkh bpNewAmount)]
+      , -- Pay to the seedSale person
+        (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (Ada.lovelaceValueOf (-bpNewAmount)))
+      , -- Create a new seedSale output that reflects the buy
+        mustPayToScripts inst [(newDatum, newValue)]
+      , -- Add a validity interval to have the lower works as submit time
+        mustValidateIn (interval submitTime (submitTime + 888_888))
+      ]
+
 -- | `withdrawSeedSale` @seedSaleParams withdrawParams@ submits a transaction that withdraws from an existing seedSale position.
-withdrawSeedSale :: SeedSaleParams -> WithdrawSeedSaleParams -> Contract w s ContractError ()
-withdrawSeedSale seedSaleParams _ = do
-  unless (wpWithdrawAmount > 0) (throwError "Must withdraw a positive amount")
+withdrawSeedSale ::
+  SeedSaleParams -> WithdrawSeedSaleParams -> Contract w s ContractError ()
+withdrawSeedSale
+  seedSaleParams@SeedSaleParams {pGADAAsset}
+  WithdrawSeedSaleParams {wpWithdrawAmount, wpSubmitTime} = do
+    unless (wpWithdrawAmount > 0) (throwError "Must withdraw a positive amount")
 
-  -- Find the positon to withdraw from
-  PaymentPubKeyHash pkh <- ownPaymentPubKeyHash
-  (oref, o, prevDatum@SeedSaleDatum {dListSale}) <- findSeedSalePosition seedSaleParams pkh
+    -- Find the positon to withdraw from
+    PaymentPubKeyHash pkh <- ownPaymentPubKeyHash
+    (oref, o, prevDatum@SeedSaleDatum {dListSale}) <- findSeedSalePositionByPKH seedSaleParams pkh
 
-  -- Get submit time and validate withdrawl amount
-  submitTime <- case wpSubmitTime of
-    Just t -> pure t
-    _ -> currentTime
-  let validAmount = dWithdrawnAmount + wpWithdrawAmount <= unlockedAmount prevDatum submitTime
-  unless validAmount (throwError "Invalid withdrawal amount")
+    -- Get submit time and validate withdrawl amount
+    submitTime <- case wpSubmitTime of
+      Just t -> pure t
+      _ -> currentTime
+    let check = checkAmountWithdraw pkh wpWithdrawAmount dListSale
+    unless check (throwError "Invalid withdrawal amount")
 
-  -- Prepare data then submit the transaction
-  let newDatum = prevDatum {dWithdrawnAmount = dWithdrawnAmount + wpWithdrawAmount}
-      newValue = seedSaleValue seedSaleParams (dTotalEpochs * dAmountPerEpoch - dWithdrawnAmount - wpWithdrawAmount)
-      inst = seedSaleScript seedSaleParams
-  submitTxPairs
-    [ -- Spend the previous output
-      mustSpendScriptOutputs inst [(oref, o, Withdraw wpWithdrawAmount)]
-    , -- Pay to the seedSale person
-      (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (assetClassValue (pSeedSaleAsset seedSaleParams) wpWithdrawAmount))
-    , -- Create a new seedSale output that reflects the withdrawal
-      mustPayToScripts inst [(newDatum, newValue)]
-    , -- Add a validity interval to have the lower works as submit time
-      mustValidateIn (interval submitTime (submitTime + 888_888))
-    ]
+    -- Prepare data then submit the transaction
+    let newDatum = prevDatum {dListSale = updateWithdraw pkh wpWithdrawAmount dListSale}
+        newValue = getValue o <> assetClassValue pGADAAsset (-wpWithdrawAmount)
+        inst = seedSaleScript seedSaleParams
+    submitTxPairs
+      [ -- Spend the previous output
+        mustSpendScriptOutputs inst [(oref, o, Withdraw pkh wpWithdrawAmount)]
+      , -- Pay to the seedSale person
+        (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (assetClassValue pGADAAsset wpWithdrawAmount))
+      , -- Create a new seedSale output that reflects the withdrawal
+        mustPayToScripts inst [(newDatum, newValue)]
+      , -- Add a validity interval to have the lower works as submit time
+        mustValidateIn (interval submitTime (submitTime + 888_888))
+      ]

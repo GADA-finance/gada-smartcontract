@@ -7,25 +7,24 @@
 module GADA.Contracts.Utils where
 
 import Control.Lens (preview, view)
-import Ledger.Constraints qualified as Constraints
 import Data.Either.Combinators (rightToMaybe)
 import Data.List qualified as L
 import Data.Map qualified as M
 import Ledger (Address, ChainIndexTxOut, TxId (TxId), TxOutRef (TxOutRef, txOutRefId, txOutRefIdx))
 import Ledger qualified
 import Ledger.Ada qualified as Ada
+import Ledger.Constraints qualified as Constraints
 import Ledger.Constraints.OnChain qualified as Constraints
 import Ledger.Constraints.TxConstraints qualified as Constraints
 import Ledger.Contexts qualified as Contexts
 import Ledger.Scripts qualified as Scripts
+import Ledger.Typed.Scripts (DatumType, RedeemerType, TypedValidator, validatorHash, validatorScript)
 import Ledger.Value qualified as Value
 import Plutus.Contract
 import PlutusTx (FromData)
 import PlutusTx qualified
 import PlutusTx.Prelude qualified as P
-import Ledger.Typed.Scripts (DatumType, RedeemerType, TypedValidator, validatorScript, validatorHash)
 import Prelude
-
 
 -- | Data type representing an unique identifier.
 type UniqueIdentifier = P.BuiltinByteString
@@ -206,7 +205,7 @@ mustMintValueWithRedeemer policy re val = (lookups, tx)
 minADAOutput :: Ledger.Value
 minADAOutput = Ada.lovelaceValueOf 2000000
 
-{-# INLINABLE (.:) #-}
+{-# INLINEABLE (.:) #-}
 infixr 8 .:
 (.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
 (f .: g) x y = f P.$ g x y

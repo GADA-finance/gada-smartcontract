@@ -1,7 +1,6 @@
-
 module Test where
 
 import Prelude
 
-main :: IO()
+main :: IO ()
 main = print ("test")
