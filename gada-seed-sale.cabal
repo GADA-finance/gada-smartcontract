@@ -51,7 +51,6 @@ library
     , either
     , lens
     , data-default
-    -- GADA Internal
 
 test-suite seed-sale-tests
   import: lang
@@ -66,4 +65,7 @@ test-suite seed-sale-tests
     , plutus-ledger-constraints
     , tasty
     , tasty-quickcheck
+    , plutus-tx
+    , freer-simple
     -- GADA Internal
+    , gada-seed-sale

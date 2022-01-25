@@ -26,29 +26,8 @@ import PlutusTx qualified
 import PlutusTx.Prelude qualified as P
 import Prelude
 
--- | Data type representing an unique identifier.
 type UniqueIdentifier = P.BuiltinByteString
 
--- | Get an unique identifier from TxOutRef.
--- It uses in total of 34 bytes:
--- * The first 2 bytes are for the output index.
--- * The rest 32 bytes are for the transaction ID.
-{-# INLINEABLE genUniqId #-}
-genUniqId :: TxOutRef -> UniqueIdentifier
-genUniqId TxOutRef {txOutRefId = TxId txId, txOutRefIdx = idx} = aux idx txId
-  where
-    aux :: P.Integer -> P.BuiltinByteString -> P.BuiltinByteString
-    aux num =
-      if firstByte P.>= perByte
-        then P.error ()
-        else P.consByteString firstByte P.. P.consByteString secondByte
-      where
-        firstByte, secondByte, perByte :: P.Integer
-        firstByte = num `P.divide` perByte
-        secondByte = num `P.modulo` perByte
-        perByte = 256
-
--- | Make a 'Value' containing only one unit of the given asset class.
 {-# INLINEABLE unitValue #-}
 unitValue :: Value.AssetClass -> Value.Value
 unitValue ac = Value.assetClassValue ac 1
@@ -104,57 +83,6 @@ findFirstOutput address condition = do
     d <- getDatum o
     P.pure (oref, o, d)
 
--- | Check whether the given txout contains an unit of `asset`
-{-# INLINEABLE isAuthenticOutput #-}
-isAuthenticOutput :: Value.AssetClass -> Ledger.TxOut -> P.Bool
-isAuthenticOutput asset o = hasUnitValue (Ledger.txOutValue o) asset
-
--- | Find a single authentic output from the current script
-{-# INLINEABLE findSingleOutputFromCurrentScript #-}
-findSingleOutputFromCurrentScript :: Value.AssetClass -> Ledger.ScriptContext -> Ledger.TxOut
-findSingleOutputFromCurrentScript token ctx =
-  case P.filter (isAuthenticOutput token) P.$ Ledger.getContinuingOutputs ctx of
-    [o] -> o
-    _ -> P.traceError "Expect exactly one output"
-
--- | Find the single authentic output from the other script
-{-# INLINEABLE findSingleOutputFromOtherScripts #-}
-findSingleOutputFromOtherScripts :: Value.AssetClass -> Ledger.TxInfo -> Ledger.TxOut
-findSingleOutputFromOtherScripts token info =
-  case P.filter (isAuthenticOutput token) P.$ Contexts.txInfoOutputs info of
-    [o] -> o
-    _ -> P.traceError "Expect exactly one output"
-
--- | Find a single output that contains the given token
-{-# INLINEABLE findSingleInputWithToken #-}
-findSingleInputWithToken :: Value.AssetClass -> Ledger.TxInfo -> Ledger.TxOut
-findSingleInputWithToken token info =
-  case P.filter (isAuthenticOutput token) P.$ Contexts.txInInfoResolved P.<$> Contexts.txInfoInputs info of
-    [o] -> o
-    _ -> P.traceError "Expect exactly one input"
-
--- | Find a single public key hash that signed the transaction,
--- return an error if there are more than one signatures
-{-# INLINEABLE findOwnPkh #-}
-findOwnPkh :: Ledger.TxInfo -> Ledger.PubKeyHash
-findOwnPkh info =
-  case Contexts.txInfoSignatories info of
-    [x] -> x
-    _ -> P.traceError "Expect exactly one signature"
-
--- | Get the ADA amount of the given ouput
-{-# INLINEABLE collateralAmount #-}
-collateralAmount :: Ledger.TxOut -> P.Integer
-collateralAmount = Ada.getLovelace P.. Ada.fromValue P.. Contexts.txOutValue
-
--- | Check whether the given output matches an output that returned to the current script
-{-# INLINEABLE checkOwnOutput #-}
-checkOwnOutput :: PlutusTx.ToData a => Ledger.ScriptContext -> a -> Value.Value -> P.Bool
-checkOwnOutput ctx = Constraints.checkOwnOutputConstraint ctx .: Constraints.OutputConstraint
-
-note :: e -> P.Maybe a -> Contract w s e a
-note err = P.maybe (throwError err) P.pure
-
 type IsScriptData a = (PlutusTx.ToData (RedeemerType a), PlutusTx.ToData (DatumType a), PlutusTx.FromData (RedeemerType a), PlutusTx.FromData (DatumType a))
 type TxPair a = (Constraints.ScriptLookups a, Constraints.TxConstraints (RedeemerType a) (DatumType a))
 
@@ -204,8 +132,3 @@ mustMintValueWithRedeemer policy re val = (lookups, tx)
 
 minADAOutput :: Ledger.Value
 minADAOutput = Ada.lovelaceValueOf 2000000
-
-{-# INLINEABLE (.:) #-}
-infixr 8 .:
-(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(f .: g) x y = f P.$ g x y

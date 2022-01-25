@@ -79,8 +79,6 @@ type SeedSaleSchema =
     .\/ Endpoint "WithdrawSeedSale" WithdrawSeedSaleParams
     .\/ Endpoint "BuySeedSale" BuySeedSaleParams
 
--- | `seedSaleEndpoints` @params@ handles the seedSale endpoints with
--- `createSeedSale`, `updateSeedSale`, and `withdrawSeedSale`.
 seedSaleEndpoints :: SeedSaleParams -> Promise () SeedSaleSchema ContractError ()
 seedSaleEndpoints seedSaleParams =
   ( handle @"CreateSeedSale" createSeedSale
@@ -114,7 +112,6 @@ createSeedSale
           [(cpInitialDatum, minADAOutput <> assetClassValue pAuthToken 1 <> assetClassValue pGADAAsset cpAmountGADA)]
       ]
 
--- | `updateSeedSale` @seedSaleParams updateParams@ submits a transaction that updates an existing seedSale position.
 updateSeedSale ::
   SeedSaleParams -> UpdateSeedSaleParams -> Contract w s ContractError ()
 updateSeedSale
@@ -139,18 +136,15 @@ buySeedSale
   BuySeedSaleParams {bpNewAmount, bpSubmitTime} = do
     unless (bpNewAmount > 0) (throwError "Must withdraw a positive amount")
 
-    -- Find the positon to buy from
     PaymentPubKeyHash pkh <- ownPaymentPubKeyHash
     (oref, o, prevDatum@SeedSaleDatum {dListSale, dRate, dMaxAmount}) <- findSeedSalePositionByPKH seedSaleParams pkh
 
-    -- Get submit time and validate buy amount
     submitTime <- case bpSubmitTime of
       Just t -> pure t
       _ -> currentTime
     let check = checkAmountDelegate pkh (bpNewAmount * dRate) dMaxAmount dListSale
     unless check (throwError "Invalid buy amount")
 
-    -- Prepare data then submit the transaction
     let newDatum = prevDatum {dListSale = updateReward pkh (bpNewAmount * dRate) dListSale}
         newValue = getValue o <> Ada.lovelaceValueOf bpNewAmount
         inst = seedSaleScript seedSaleParams
@@ -161,11 +155,9 @@ buySeedSale
         (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (Ada.lovelaceValueOf (-bpNewAmount)))
       , -- Create a new seedSale output that reflects the buy
         mustPayToScripts inst [(newDatum, newValue)]
-      , -- Add a validity interval to have the lower works as submit time
-        mustValidateIn (interval submitTime (submitTime + 888_888))
+      , mustValidateIn (interval submitTime (submitTime + 100000))
       ]
 
--- | `withdrawSeedSale` @seedSaleParams withdrawParams@ submits a transaction that withdraws from an existing seedSale position.
 withdrawSeedSale ::
   SeedSaleParams -> WithdrawSeedSaleParams -> Contract w s ContractError ()
 withdrawSeedSale
@@ -173,28 +165,21 @@ withdrawSeedSale
   WithdrawSeedSaleParams {wpWithdrawAmount, wpSubmitTime} = do
     unless (wpWithdrawAmount > 0) (throwError "Must withdraw a positive amount")
 
-    -- Find the positon to withdraw from
     PaymentPubKeyHash pkh <- ownPaymentPubKeyHash
     (oref, o, prevDatum@SeedSaleDatum {dListSale}) <- findSeedSalePositionByPKH seedSaleParams pkh
 
-    -- Get submit time and validate withdrawl amount
     submitTime <- case wpSubmitTime of
       Just t -> pure t
       _ -> currentTime
     let check = checkAmountWithdraw pkh wpWithdrawAmount dListSale
     unless check (throwError "Invalid withdrawal amount")
 
-    -- Prepare data then submit the transaction
     let newDatum = prevDatum {dListSale = updateWithdraw pkh wpWithdrawAmount dListSale}
         newValue = getValue o <> assetClassValue pGADAAsset (-wpWithdrawAmount)
         inst = seedSaleScript seedSaleParams
     submitTxPairs
-      [ -- Spend the previous output
-        mustSpendScriptOutputs inst [(oref, o, Withdraw pkh wpWithdrawAmount)]
-      , -- Pay to the seedSale person
-        (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (assetClassValue pGADAAsset wpWithdrawAmount))
-      , -- Create a new seedSale output that reflects the withdrawal
-        mustPayToScripts inst [(newDatum, newValue)]
-      , -- Add a validity interval to have the lower works as submit time
-        mustValidateIn (interval submitTime (submitTime + 888_888))
+      [ mustSpendScriptOutputs inst [(oref, o, Withdraw pkh wpWithdrawAmount)]
+      , (mempty, Constraints.mustPayToPubKey (PaymentPubKeyHash pkh) (assetClassValue pGADAAsset wpWithdrawAmount))
+      , mustPayToScripts inst [(newDatum, newValue)]
+      , mustValidateIn (interval submitTime (submitTime + 888_888))
       ]
