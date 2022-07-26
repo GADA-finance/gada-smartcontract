@@ -13,7 +13,6 @@ import Ledger.Address (unPaymentPubKeyHash)
 import Ledger.Time (POSIXTime (POSIXTime))
 import Ledger.TimeSlot (scSlotZeroTime)
 import Ledger.Value qualified as Value
-
 import Control.Monad.Freer qualified as Freer
 import Control.Monad.Freer.Error qualified as Freer
 import Plutus.Contract (Contract, ContractError, Endpoint, Promise, awaitTxConfirmed)

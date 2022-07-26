@@ -16,9 +16,8 @@ import Ledger.Ada qualified as Ada
 import Ledger.Constraints qualified as Constraints
 import Ledger.Constraints.OnChain qualified as Constraints
 import Ledger.Constraints.TxConstraints qualified as Constraints
-import Ledger.Contexts qualified as Contexts
 import Ledger.Scripts qualified as Scripts
-import Ledger.Typed.Scripts (DatumType, RedeemerType, TypedValidator, validatorHash, validatorScript)
+import Ledger.Typed.Scripts (DatumType, RedeemerType, TypedValidator, validatorHash, mkUntypedValidator,validatorScript)
 import Ledger.Value qualified as Value
 import Plutus.Contract
 import PlutusTx (FromData)
@@ -41,21 +40,6 @@ hasUnitValue v ac = Value.assetClassValueOf v ac P.== 1
 {-# INLINEABLE hasNoneValue #-}
 hasNoneValue :: Value.Value -> Value.AssetClass -> P.Bool
 hasNoneValue v ac = Value.assetClassValueOf v ac P.== 0
-
--- | Get all the value from inputs
-{-# INLINEABLE valueWithin #-}
-valueWithin :: Ledger.TxInInfo -> Value.Value
-valueWithin = Ledger.txOutValue P.. Contexts.txInInfoResolved
-
-{-# INLINEABLE findDatum' #-}
-findDatum' :: PlutusTx.FromData a => Ledger.TxInfo -> Scripts.DatumHash -> P.Maybe a
-findDatum' info hash = Contexts.findDatum hash info P.>>= PlutusTx.fromBuiltinData P.. Ledger.getDatum
-
--- | Find the datum of an output
-{-# INLINEABLE findDatumFromOutput #-}
-findDatumFromOutput :: PlutusTx.FromData a => Ledger.TxInfo -> Ledger.TxOut -> a
-findDatumFromOutput info output =
-  P.fromMaybe (P.traceError "Invalid datum") (Contexts.txOutDatumHash output P.>>= findDatum' info)
 
 -- | Get the value of the given ChainIndexTxOut
 getValue :: Ledger.ChainIndexTxOut -> Ledger.Value
@@ -93,12 +77,18 @@ mustPayToScripts script dataOutputs = (lookups, tx)
     tx = foldMap (uncurry Constraints.mustPayToTheScript) dataOutputs
 
 -- | The constraint to spend script outputs.
-mustSpendScriptOutputs :: PlutusTx.ToData (RedeemerType a) => TypedValidator a -> [(Contexts.TxOutRef, Ledger.ChainIndexTxOut, RedeemerType a)] -> TxPair b
+-- | The constraint to spend script outputs.
+mustSpendScriptOutputs ::
+  PlutusTx.ToData (RedeemerType a) =>
+  TypedValidator a ->
+  [(TxOutRef, ChainIndexTxOut, RedeemerType a)] ->
+  TxPair b
 mustSpendScriptOutputs script dataInputs = (lookups, tx)
   where
-    unspent = M.fromList $ (\(ref, txInf, _) -> (ref, txInf)) <$> dataInputs
+    unspent = M.fromList $ (\(oref, o, _) -> (oref, o)) <$> dataInputs
     lookups = Constraints.otherScript (validatorScript script) <> Constraints.unspentOutputs unspent
-    tx = foldMap (\(ref, _, redeemer) -> Constraints.mustSpendScriptOutput ref (Ledger.Redeemer $ PlutusTx.toBuiltinData redeemer)) dataInputs
+    tx = foldMap perInput dataInputs
+    perInput (oref, _, rd) = Constraints.mustSpendScriptOutput oref (Ledger.Redeemer $ PlutusTx.toBuiltinData rd)
 
 mustValidateIn :: Ledger.POSIXTimeRange -> TxPair a
 mustValidateIn range = (mempty, Constraints.mustValidateIn range)
@@ -113,7 +103,7 @@ mustPayToOtherScripts otherScripts = (lookups, tx)
       foldMap (\(dt, val) -> Constraints.mustPayToOtherScript (validatorHash validator) (Ledger.Datum $ PlutusTx.toBuiltinData dt) val) outp
 
 submitTxPairs :: (AsContractError e, IsScriptData a) => [TxPair a] -> Contract w s e ()
-submitTxPairs pairs = mkTxConstraints lookups constraints >>= submitTxConfirmed . Constraints.adjustUnbalancedTx
+submitTxPairs pairs = mkTxConstraints lookups constraints >>= submitTxConfirmed
   where
     lookups = foldMap fst pairs
     constraints = foldMap snd pairs

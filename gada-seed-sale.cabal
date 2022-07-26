@@ -51,6 +51,7 @@ library
     , either
     , lens
     , data-default
+    , plutus-script-utils
 
 test-suite seed-sale-tests
   import: lang

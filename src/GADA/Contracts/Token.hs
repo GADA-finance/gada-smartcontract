@@ -30,7 +30,7 @@ fakeValidator _ _ = True
 fakeMintingPolicy :: TScripts.MintingPolicy
 fakeMintingPolicy =
   Ledger.mkMintingPolicyScript
-    $$(PlutusTx.compile [||TScripts.wrapMintingPolicy fakeValidator||])
+    $$(PlutusTx.compile [||TScripts.mkUntypedMintingPolicy fakeValidator||])
 
 fakeMintingPolicyHash :: Scripts.MintingPolicyHash
 fakeMintingPolicyHash = Scripts.mintingPolicyHash fakeMintingPolicy
@@ -43,5 +43,5 @@ initGADA amount = do
   let fakeAssetClass = Value.assetClass fakeCurrencySymbol gadaTokenName
       lookups = Constraints.mintingPolicy fakeMintingPolicy
       constraints = Constraints.mustMintValue (Value.assetClassValue fakeAssetClass amount)
-  mkTxConstraints @Void lookups constraints >>= submitTxConfirmed . Constraints.adjustUnbalancedTx
+  mkTxConstraints @Void lookups constraints >>= submitTxConfirmed
   void $ waitNSlots 1

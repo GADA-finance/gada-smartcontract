@@ -21,20 +21,18 @@ import Ledger (
   ivFrom,
   mintingPolicyHash,
   mkMintingPolicyScript,
-  scriptAddress,
+  scriptValidatorHashAddress,
   scriptContextTxInfo,
   txInfoValidRange,
   txSignedBy,
  )
-import Ledger.Constraints.OnChain (checkOwnOutputConstraint)
-import Ledger.Constraints.TxConstraints (OutputConstraint (OutputConstraint))
 import Ledger.Typed.Scripts (
   MintingPolicy,
   TypedValidator,
   mkTypedValidatorParam,
-  validatorScript,
-  wrapMintingPolicy,
-  wrapValidator,
+  mkUntypedValidator,
+  mkUntypedMintingPolicy,
+  validatorHash,
  )
 import Ledger.Value (CurrencySymbol, Value, mpsSymbol)
 import PlutusTx (applyCode, compile, liftCode)
@@ -75,10 +73,10 @@ seedSaleScript :: SeedSaleParams -> TypedValidator SeedSalePosition
 seedSaleScript =
   mkTypedValidatorParam @SeedSalePosition
     $$(compile [||validateSeedSale||])
-    $$(compile [||wrapValidator||])
+    $$(compile [||mkUntypedValidator||])
 
 seedSaleAddress :: SeedSaleParams -> Address
-seedSaleAddress = scriptAddress P.. validatorScript P.. seedSaleScript
+seedSaleAddress = (`scriptValidatorHashAddress` P.Nothing) P.. validatorHash P.. seedSaleScript
 
 validateSeedSaleAuthToken :: SeedSaleAuthTokenParams -> () -> ScriptContext -> P.Bool
 validateSeedSaleAuthToken SeedSaleAuthTokenParams {tpOperatorPKH} _ ScriptContext {scriptContextTxInfo} =
@@ -87,7 +85,7 @@ validateSeedSaleAuthToken SeedSaleAuthTokenParams {tpOperatorPKH} _ ScriptContex
 seedSaleAuthTokenPolicy :: SeedSaleAuthTokenParams -> MintingPolicy
 seedSaleAuthTokenPolicy params =
   mkMintingPolicyScript P.$
-    $$(compile [||wrapMintingPolicy P.. validateSeedSaleAuthToken||]) `applyCode` liftCode params
+    $$(compile [||mkUntypedMintingPolicy P.. validateSeedSaleAuthToken||]) `applyCode` liftCode params
 
 seedSaleAuthTokenCurrencySymbol :: SeedSaleAuthTokenParams -> CurrencySymbol
 seedSaleAuthTokenCurrencySymbol = mpsSymbol P.. mintingPolicyHash P.. seedSaleAuthTokenPolicy
