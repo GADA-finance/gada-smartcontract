@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Core Seed Sale types.
-module GADA.Contracts.Types where
+module GADA.Contracts.Vesting.Types where
 
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
@@ -18,14 +18,14 @@ import PlutusTx.AssocMap (Map)
 import Prelude (Eq, Integer, Maybe, Show)
 
 data SeedSaleParams = SeedSaleParams
-  { pGADAAsset :: AssetClass
-  , pAuthToken :: AssetClass
+  { pGadaAsset :: AssetClass
+  , pVestingAuthToken :: AssetClass
   , pOperatorPKH :: PubKeyHash
   }
   deriving stock (Generic, Show)
 
 data SeedSaleDatum = SeedSaleDatum
-  { dListSale :: Map PubKeyHash (Integer, Integer)
+  { 
   , dRate :: Integer
   , dAmountPerMonth :: Integer
   , dMaxAmount :: Integer
