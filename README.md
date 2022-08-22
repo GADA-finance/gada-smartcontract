@@ -1,3 +1,3 @@
-# GADA-seed-sale
+# GADA-Smartcontract
 
-GADA-seed-sale
+
