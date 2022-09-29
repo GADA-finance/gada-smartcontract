@@ -1,0 +1,30 @@
+gadaAsset:
+  unAssetClass:
+    - unCurrencySymbol: 4ebcb13f01e735976486b3c39072eed6d9f362e916fb04fe2c37f951
+    - unTokenName: tGADA
+vesting:
+  LegacyVesting:
+    getPubKeyHash: 82aaec1eee39cc9ae68f2a258c803b2294323d9ce5fcea6c587c2dd7
+  TeamVesting:
+    getPubKeyHash: 9dcc05ec370e10d13e265858a5db68704adbc0bc837b25998dab6f80
+  PrivateSaleVesting:
+    getPubKeyHash: af529cc830eb41458ce9e62d6c8b5d89818f846dcef4cce85a2116e0
+staking:
+  sAPYOffset: 100
+  sLockedOptions:
+    - loLockDuration: 300000
+      loAPY: 6 # 6% interest
+      loJoinDeadline: 2116729262000 # Jan 28 2037 04:21:02 UTC
+    - loLockDuration: 600000
+      loAPY: 15 # 15% interest
+      loJoinDeadline: 2116729262000 # Jan 28 2037 04:21:02 UTC
+  sSixMonthExtensionLockedOptions:
+    - loLockDuration: 300000
+      loAPY: 6 # 6% interest
+      loJoinDeadline: 2119594255000 # Mar 02 2037 08:10:55 UTC
+  sSixMonthExtensionLockedOptions01012023:
+    - loLockDuration: 300000
+      loAPY: 6 # 6% interest
+      loJoinDeadline: 2119504255000 # March 01 2037 7:10:55 UTC
+  sAuthTokenName:
+    unTokenName: locked-staking-auth-token

@@ -1,0 +1,130 @@
+cabal-version: 3.6
+name:          gada-pab
+version:       0.1.0.0
+author:        GADA Labs
+maintainer:    gada.com
+
+flag testing
+  description: Testing flag. Implies short-epoch.
+  default:     False
+  manual:      True
+
+flag short-epoch
+  description: Set an epoch at two slots. For testing & staging only.
+  default:     False
+  manual:      True
+
+common lang
+  default-language: Haskell2010
+  default-extensions:
+    ImportQualifiedPost
+  ghc-options:
+    -Weverything -Werror
+    -Wno-implicit-prelude
+    -- For plutus
+    -Wno-all-missed-specialisations
+    -Wno-missing-local-signatures
+    -Wno-missing-safe-haskell-mode
+    -Wno-unsafe
+    -Wno-unused-packages
+    -- For plutus-tx
+    -fno-ignore-interface-pragmas
+    -fno-omit-interface-pragmas
+    -fobject-code
+
+library
+  import: lang
+  hs-source-dirs: src
+  exposed-modules:
+    GADA.PAB.Contracts
+    GADA.PAB.Deployment
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , data-default
+    , openapi3
+    , plutus-ledger
+    , plutus-pab
+    , plutus-pab-executables
+    , prettyprinter
+    , purescript-bridge
+    -- GADA Internal
+    , gada-staking
+    , gada-vesting
+  if flag(testing)
+    cpp-options: -DTESTING -DSHORT_EPOCH
+  elif flag(short-epoch)
+      cpp-options: -DSHORT_EPOCH
+
+executable pab
+  import: lang
+  main-is: Main.hs
+  hs-source-dirs: app
+  other-modules:
+  ghc-options: -threaded
+  build-depends:
+    , aeson
+    , base
+    , plutus-pab
+    , plutus-pab-executables
+    -- GADA internal
+    , gada-pab
+    , gada-staking
+    , gada-vesting
+
+executable bootstrap
+  import: lang
+  main-is: Bootstrap.hs
+  other-modules:
+  hs-source-dirs: app
+  build-depends:
+    , aeson
+    , base
+    , base16-bytestring
+    , bytestring
+    , cardano-api
+    , containers
+    , extra
+    , filepath
+    , plutus-ledger
+    , plutus-ledger-api
+    , plutus-pab
+    , plutus-pab-executables
+    , serialise
+    , text
+    , yaml
+    -- GADA internal
+    , cardano-api-extra
+    , gada-core
+    , gada-pab
+    , gada-staking
+    , gada-vesting
+
+test-suite golden-testing
+  import: lang
+  main-is: Spec.hs
+  hs-source-dirs: golden-test
+  type: exitcode-stdio-1.0
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , filepath
+    , plutus-ledger
+    , plutus-pab
+    , plutus-pab-executables
+    , plutus-tx
+    , plutus-tx-plugin
+    , tasty
+    , tasty-golden
+    , yaml
+    -- GADA Internal
+    , gada-pab
+    , gada-staking
+    , gada-vesting
+  if flag(testing)
+    cpp-options: -DTESTING -DSHORT_EPOCH
+  elif flag(short-epoch)
+    cpp-options: -DSHORT_EPOCH

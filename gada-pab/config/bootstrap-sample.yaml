@@ -1,0 +1,22 @@
+gadaAsset:
+  unAssetClass:
+    - unCurrencySymbol: 57fca08abbaddee36da742a839f7d83a7e1d2419f1507fcbf3916522
+    - unTokenName: MINT
+vesting:
+  LegacyVesting:
+    getPubKeyHash: 87198dca2778aae8fffeab6413a08a4b3adfa4f7c8b3e50e04837963
+  TeamVesting:
+    getPubKeyHash: 8abd137fd589ce1a0d36fbf9760b748e065e968878c96a8e2a9e716a
+  PrivateSaleVesting:
+    getPubKeyHash: 1cba90789fc1e1b7b27b1a8c9194afd9b3844bc3e9f41b760af5cf8c
+staking:
+  sAPYOffset: 1000
+  sLockedOptions:
+    - loLockDuration: 6000
+      loAPY: 100 # 10%
+      loJoinDeadline: 1672531200000
+    - loLockDuration: 12000
+      loAPY: 200 # 20%
+      loJoinDeadline: 1672531200000
+  sAuthTokenName:
+    unTokenName: locked_staking_auth_token
